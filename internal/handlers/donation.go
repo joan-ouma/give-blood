@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/joan-ouma/give-blood/internal/dto"
 	"github.com/joan-ouma/give-blood/internal/entities"
@@ -52,15 +51,9 @@ func (h *DonationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.DriveID == nil && req.LocationID == nil {
 		fields["driveId"] = "Either DriveID or LocationID is required"
 	}
-	donatedAt, errDate := time.Parse(time.RFC3339, req.DonatedAt)
-	if errDate != nil {
-		fields["donatedAt"] = "Invalid RFC3339 date format"
-	} else if donatedAt.After(time.Now().UTC()) {
-		fields["donatedAt"] = "Donation date cannot be in the future"
-	}
 
-	if req.Pints != nil && (*req.Pints < 1 || *req.Pints > 2) {
-		fields["pints"] = "Pints must be between 1 and 2"
+	if req.Pints != nil && (*req.Pints < 0 || *req.Pints > 2) {
+		fields["pints"] = "Pints must be between 0 and 2"
 	}
 
 	if len(fields) > 0 {
@@ -69,22 +62,27 @@ func (h *DonationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	donation, err := h.donationService.Create(r.Context(), userID, &req)
-	if errors.Is(err, service.ErrDonationValidation) {
-		writeError(w, http.StatusBadRequest, "validation failed")
-		return
-	}
-	if errors.Is(err, service.ErrForbidden) {
-		writeError(w, http.StatusForbidden, "forbidden")
-		return
-	}
 	if err != nil {
+		if strings.Contains(err.Error(), "cooldown") {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, service.ErrDonationValidation) {
+			writeError(w, http.StatusBadRequest, "validation failed")
+			return
+		}
+		if errors.Is(err, service.ErrForbidden) {
+			writeError(w, http.StatusForbidden, "forbidden")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
+	enriched := h.donationService.EnrichList(r.Context(), []entities.Donation{*donation})
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(mapDonationToResponse(donation))
+	_ = json.NewEncoder(w).Encode(enriched[0])
 }
 
 func (h *DonationHandler) ListMine(w http.ResponseWriter, r *http.Request) {
@@ -121,13 +119,9 @@ func (h *DonationHandler) ListMine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	responseList := make([]dto.DonationResponse, len(list))
-	for i, donation := range list {
-		responseList[i] = mapDonationToResponse(&donation)
-	}
-
+	enriched := h.donationService.EnrichList(r.Context(), list)
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(responseList)
+	_ = json.NewEncoder(w).Encode(enriched)
 }
 
 func (h *DonationHandler) ListPending(w http.ResponseWriter, r *http.Request) {
@@ -144,6 +138,7 @@ func (h *DonationHandler) ListPending(w http.ResponseWriter, r *http.Request) {
 
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
+	status := r.URL.Query().Get("status")
 
 	var limit int64 = 20
 	if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
@@ -158,22 +153,18 @@ func (h *DonationHandler) ListPending(w http.ResponseWriter, r *http.Request) {
 		offset = parsed
 	}
 
-	list, err := h.donationService.ListPending(r.Context(), userID, limit, offset)
+	list, err := h.donationService.ListPending(r.Context(), userID, status, limit, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	responseList := make([]dto.DonationResponse, len(list))
-	for i, donation := range list {
-		responseList[i] = mapDonationToResponse(&donation)
-	}
-
+	enriched := h.donationService.EnrichList(r.Context(), list)
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(responseList)
+	_ = json.NewEncoder(w).Encode(enriched)
 }
 
-func (h *DonationHandler) Verify(w http.ResponseWriter, r *http.Request) {
+func (h *DonationHandler) Accept(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -186,13 +177,13 @@ func (h *DonationHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 3 || parts[2] == "" {
+	if len(parts) < 4 || parts[3] == "" {
 		writeError(w, http.StatusBadRequest, "missing donation id")
 		return
 	}
-	donationIDStr := parts[2]
+	donationIDStr := parts[3]
 
-	donation, err := h.donationService.Verify(r.Context(), userID, donationIDStr)
+	donation, err := h.donationService.Accept(r.Context(), userID, donationIDStr)
 	if errors.Is(err, service.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "donation not found")
 		return
@@ -210,8 +201,62 @@ func (h *DonationHandler) Verify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	enriched := h.donationService.EnrichList(r.Context(), []entities.Donation{*donation})
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(mapDonationToResponse(donation))
+	_ = json.NewEncoder(w).Encode(enriched[0])
+}
+
+func (h *DonationHandler) Verify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	userID, role, err := service.GetUserFromContext(r.Context())
+	if err != nil || role != string(entities.RoleAgency) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 4 || parts[3] == "" {
+		writeError(w, http.StatusBadRequest, "missing donation id")
+		return
+	}
+	donationIDStr := parts[3]
+
+	var req dto.DonationVerifyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Pints < 1 || req.Pints > 2 {
+		writeError(w, http.StatusBadRequest, "pints must be between 1 and 2")
+		return
+	}
+
+	donation, err := h.donationService.Verify(r.Context(), userID, donationIDStr, req.Pints)
+	if errors.Is(err, service.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "donation not found")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if errors.Is(err, service.ErrConflict) {
+		writeError(w, http.StatusConflict, "donation already processed")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	enriched := h.donationService.EnrichList(r.Context(), []entities.Donation{*donation})
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(enriched[0])
 }
 
 func (h *DonationHandler) Reject(w http.ResponseWriter, r *http.Request) {
@@ -227,11 +272,11 @@ func (h *DonationHandler) Reject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 3 || parts[2] == "" {
+	if len(parts) < 4 || parts[3] == "" {
 		writeError(w, http.StatusBadRequest, "missing donation id")
 		return
 	}
-	donationIDStr := parts[2]
+	donationIDStr := parts[3]
 
 	var req dto.DonationRejectRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -264,51 +309,7 @@ func (h *DonationHandler) Reject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	enriched := h.donationService.EnrichList(r.Context(), []entities.Donation{*donation})
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(mapDonationToResponse(donation))
-}
-
-func mapDonationToResponse(d *entities.Donation) dto.DonationResponse {
-	var driveIDStr *string
-	if d.DriveID != nil {
-		s := d.DriveID.Hex()
-		driveIDStr = &s
-	}
-	var locIDStr *string
-	if d.LocationID != nil {
-		s := d.LocationID.Hex()
-		locIDStr = &s
-	}
-	var verifiedAtStr *string
-	if d.VerifiedAt != nil {
-		s := d.VerifiedAt.Format(time.RFC3339)
-		verifiedAtStr = &s
-	}
-	var verifiedByStr *string
-	if d.VerifiedBy != nil {
-		s := d.VerifiedBy.Hex()
-		verifiedByStr = &s
-	}
-	var nextEligibleAtStr *string
-	if d.NextEligibleAt != nil {
-		s := d.NextEligibleAt.Format(time.RFC3339)
-		nextEligibleAtStr = &s
-	}
-
-	return dto.DonationResponse{
-		ID:              d.ID.Hex(),
-		DonorID:         d.DonorID.Hex(),
-		AgencyID:        d.AgencyID.Hex(),
-		DriveID:         driveIDStr,
-		LocationID:      locIDStr,
-		Pints:           d.Pints,
-		Status:          string(d.Status),
-		DonatedAt:       d.DonatedAt.Format(time.RFC3339),
-		VerifiedAt:      verifiedAtStr,
-		VerifiedBy:      verifiedByStr,
-		RejectionReason: d.RejectionReason,
-		NextEligibleAt:  nextEligibleAtStr,
-		CreatedAt:       d.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:       d.UpdatedAt.Format(time.RFC3339),
-	}
+	_ = json.NewEncoder(w).Encode(enriched[0])
 }

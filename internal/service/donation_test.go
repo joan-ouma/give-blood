@@ -61,11 +61,8 @@ func TestDonationService(t *testing.T) {
 	var createdDonationID string
 
 	t.Run("Create Valid Donation", func(t *testing.T) {
-		pints := 1
 		req := &dto.DonationCreateRequest{
-			DriveID:   &driveIDStr,
-			Pints:     &pints,
-			DonatedAt: time.Now().Format(time.RFC3339),
+			DriveID: &driveIDStr,
 		}
 
 		donation, err := svc.Create(ctx, donorID, req)
@@ -80,8 +77,19 @@ func TestDonationService(t *testing.T) {
 		createdDonationID = donation.ID.Hex()
 	})
 
+	t.Run("Accept RSVP", func(t *testing.T) {
+		donation, err := svc.Accept(ctx, agencyID, createdDonationID)
+		if err != nil {
+			t.Fatalf("failed to accept RSVP: %v", err)
+		}
+
+		if donation.Status != entities.StatusAccepted {
+			t.Errorf("expected accepted status, got %s", donation.Status)
+		}
+	})
+
 	t.Run("Verify Donation Valid", func(t *testing.T) {
-		donation, err := svc.Verify(ctx, agencyID, createdDonationID)
+		donation, err := svc.Verify(ctx, agencyID, createdDonationID, 1)
 		if err != nil {
 			t.Fatalf("failed to verify donation: %v", err)
 		}
@@ -96,21 +104,19 @@ func TestDonationService(t *testing.T) {
 	})
 
 	t.Run("Verify Already Verified Donation Conflict", func(t *testing.T) {
-		_, err := svc.Verify(ctx, agencyID, createdDonationID)
+		_, err := svc.Verify(ctx, agencyID, createdDonationID, 1)
 		if !errors.Is(err, ErrConflict) {
 			t.Errorf("expected ErrConflict, got %v", err)
 		}
 	})
 
 	t.Run("Create Second Donation and Reject It", func(t *testing.T) {
-		pints := 2
+		secondDonorID := primitive.NewObjectID().Hex()
 		req := &dto.DonationCreateRequest{
-			DriveID:   &driveIDStr,
-			Pints:     &pints,
-			DonatedAt: time.Now().Format(time.RFC3339),
+			DriveID: &driveIDStr,
 		}
 
-		donation, err := svc.Create(ctx, donorID, req)
+		donation, err := svc.Create(ctx, secondDonorID, req)
 		if err != nil {
 			t.Fatalf("failed to create second donation: %v", err)
 		}

@@ -27,7 +27,12 @@ func New(
 
 	cors := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			origin := r.Header.Get("Origin")
+			if origin == "http://localhost:5173" || origin == "http://localhost:5174" || origin == allowedOrigin {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			} else {
+				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			}
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -157,6 +162,10 @@ func New(
 
 		action := parts[4]
 		if r.Method == http.MethodPost {
+			if action == "accept" {
+				authMiddleware(http.HandlerFunc(donationHandler.Accept)).ServeHTTP(w, r)
+				return
+			}
 			if action == "verify" {
 				authMiddleware(http.HandlerFunc(donationHandler.Verify)).ServeHTTP(w, r)
 				return

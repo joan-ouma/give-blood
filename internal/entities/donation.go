@@ -10,6 +10,7 @@ type DonationStatus string
 
 const (
 	StatusPending  DonationStatus = "pending"
+	StatusAccepted DonationStatus = "accepted"
 	StatusVerified DonationStatus = "verified"
 	StatusRejected DonationStatus = "rejected"
 )

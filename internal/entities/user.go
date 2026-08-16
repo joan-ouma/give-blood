@@ -19,6 +19,8 @@ type User struct {
 	PasswordHash string             `bson:"passwordHash" json:"-"`
 	Role         Role               `bson:"role" json:"role"`
 	Name         string             `bson:"name" json:"name"`
+	Lat          *float64           `bson:"lat,omitempty" json:"lat,omitempty"`
+	Lng          *float64           `bson:"lng,omitempty" json:"lng,omitempty"`
 	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
 	UpdatedAt    time.Time          `bson:"updatedAt" json:"updatedAt"`
 }

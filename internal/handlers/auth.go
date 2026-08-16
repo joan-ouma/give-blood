@@ -61,6 +61,14 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if req.Name == "" {
 		fields["name"] = "Name is required"
 	}
+	if req.Role == "agency" {
+		if req.Lat == nil {
+			fields["lat"] = "Latitude is required"
+		}
+		if req.Lng == nil && req.Long == nil {
+			fields["long"] = "Longitude is required"
+		}
+	}
 
 	if len(fields) > 0 {
 		writeFieldsError(w, http.StatusBadRequest, "validation failed", fields)
@@ -72,7 +80,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "email already registered")
 		return
 	}
-	if errors.Is(err, service.ErrInvalidEmail) || errors.Is(err, service.ErrInvalidPass) || errors.Is(err, service.ErrInvalidRole) || errors.Is(err, service.ErrInvalidName) {
+	if errors.Is(err, service.ErrInvalidEmail) || errors.Is(err, service.ErrInvalidPass) || errors.Is(err, service.ErrInvalidRole) || errors.Is(err, service.ErrInvalidName) || errors.Is(err, service.ErrInvalidCoords) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

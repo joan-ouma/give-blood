@@ -82,16 +82,34 @@ func TestUserService(t *testing.T) {
 	})
 
 	t.Run("Duplicate Email Registration", func(t *testing.T) {
+		latVal := -1.2921
+		lngVal := 36.8219
 		req := &dto.RegisterRequest{
 			Email:    "newuser@example.com", // Duplicate
 			Password: "otherpassword123",
 			Role:     "agency",
 			Name:     "Duplicate User",
+			Lat:      &latVal,
+			Lng:      &lngVal,
 		}
 
 		_, err := svc.Register(ctx, req)
 		if !errors.Is(err, ErrAlreadyExists) {
 			t.Errorf("expected ErrAlreadyExists error, got %v", err)
+		}
+	})
+
+	t.Run("Missing Agency Coordinates Registration", func(t *testing.T) {
+		req := &dto.RegisterRequest{
+			Email:    "agencycoord@example.com",
+			Password: "securepassword123",
+			Role:     "agency",
+			Name:     "No Coords Agency",
+		}
+
+		_, err := svc.Register(ctx, req)
+		if !errors.Is(err, ErrInvalidCoords) {
+			t.Errorf("expected ErrInvalidCoords error, got %v", err)
 		}
 	})
 

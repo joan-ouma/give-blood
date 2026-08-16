@@ -23,6 +23,7 @@ var (
 	ErrInvalidPass   = errors.New("password must be at least 8 characters")
 	ErrInvalidRole   = errors.New("role must be agency or donor")
 	ErrInvalidName   = errors.New("name is required")
+	ErrInvalidCoords = errors.New("latitude and longitude are required for agencies")
 )
 
 type UserService struct {
@@ -62,10 +63,26 @@ func (s *UserService) Register(ctx context.Context, req *dto.RegisterRequest) (*
 	if name == "" {
 		return nil, ErrInvalidName
 	}
+	if role == entities.RoleAgency {
+		if req.Lat == nil || (req.Lng == nil && req.Long == nil) {
+			return nil, ErrInvalidCoords
+		}
+	}
 
 	hash, err := HashPassword(password)
 	if err != nil {
 		return nil, err
+	}
+
+	var lat *float64
+	var lng *float64
+	if req.Lat != nil {
+		lat = req.Lat
+	}
+	if req.Lng != nil {
+		lng = req.Lng
+	} else if req.Long != nil {
+		lng = req.Long
 	}
 
 	u := &entities.User{
@@ -73,6 +90,8 @@ func (s *UserService) Register(ctx context.Context, req *dto.RegisterRequest) (*
 		PasswordHash: hash,
 		Role:         role,
 		Name:         name,
+		Lat:          lat,
+		Lng:          lng,
 	}
 
 	u.ID = primitive.NewObjectID()

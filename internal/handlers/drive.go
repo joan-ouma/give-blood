@@ -236,11 +236,11 @@ func (h *DriveHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 3 || parts[2] == "" {
+	if len(parts) < 4 || parts[3] == "" {
 		writeError(w, http.StatusBadRequest, "missing drive id")
 		return
 	}
-	driveIDStr := parts[2]
+	driveIDStr := parts[3]
 
 	drive, err := h.driveService.GetByID(r.Context(), driveIDStr)
 	if errors.Is(err, service.ErrNotFound) {

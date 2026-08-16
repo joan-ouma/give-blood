@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/joan-ouma/give-blood/internal/config"
@@ -28,6 +30,14 @@ func main() {
 
 	mongoDB := database.Client.Database("blood_donation")
 	ctx := context.Background()
+
+	// Check if database has existing users
+	userCount, err := mongoDB.Collection("users").CountDocuments(ctx, bson.M{})
+	if err == nil && userCount > 0 && os.Getenv("FORCE_SEED") != "true" {
+		log.Println("Database already contains users. Skipping seed to protect existing data.")
+		log.Println("To force seeding and drop all collections, run with FORCE_SEED=true environment variable.")
+		return
+	}
 
 	// Clear existing collections
 	log.Println("Clearing existing collections...")
@@ -57,6 +67,16 @@ func main() {
 		log.Fatalf("failed to hash password: %v", err)
 	}
 
+	joanoumaPassHash, err := service.HashPassword("assembly1234")
+	if err != nil {
+		log.Fatalf("failed to hash password: %v", err)
+	}
+
+	latNairobi := -1.2921
+	lngNairobi := 36.8219
+	latMombasa := -4.0435
+	lngMombasa := 39.6682
+
 	// 1. Create Demo Agencies
 	log.Println("Creating agencies...")
 	agency1 := entities.User{
@@ -65,6 +85,8 @@ func main() {
 		PasswordHash: passHash,
 		Role:         entities.RoleAgency,
 		Name:         "Red Cross Nairobi",
+		Lat:          &latNairobi,
+		Lng:          &lngNairobi,
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 	}
@@ -74,6 +96,8 @@ func main() {
 		PasswordHash: passHash,
 		Role:         entities.RoleAgency,
 		Name:         "Mombasa Blood Bank",
+		Lat:          &latMombasa,
+		Lng:          &lngMombasa,
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 	}
@@ -81,10 +105,6 @@ func main() {
 
 	// 2. Create Locations
 	log.Println("Creating locations...")
-	latNairobi := -1.2921
-	lngNairobi := 36.8219
-	latMombasa := -4.0435
-	lngMombasa := 39.6682
 
 	loc1 := entities.Location{
 		ID:        primitive.NewObjectID(),
@@ -169,12 +189,25 @@ func main() {
 
 	// 4. Create Donors
 	log.Println("Creating donors...")
+	latAlice := -1.3000
+	lngAlice := 36.8000
+	latBob := -1.3100
+	lngBob := 36.8100
+	latCharlie := -1.3200
+	lngCharlie := 36.8200
+	latDavid := -1.3300
+	lngDavid := 36.8300
+	latJoan := -1.2950
+	lngJoan := 36.8250
+
 	donorAlice := entities.User{
 		ID:           primitive.NewObjectID(),
 		Email:        "alice@donor.com",
 		PasswordHash: passHash,
 		Role:         entities.RoleDonor,
 		Name:         "Alice Johnson",
+		Lat:          &latAlice,
+		Lng:          &lngAlice,
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 	}
@@ -184,6 +217,8 @@ func main() {
 		PasswordHash: passHash,
 		Role:         entities.RoleDonor,
 		Name:         "Bob Smith",
+		Lat:          &latBob,
+		Lng:          &lngBob,
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 	}
@@ -193,6 +228,8 @@ func main() {
 		PasswordHash: passHash,
 		Role:         entities.RoleDonor,
 		Name:         "Charlie Green",
+		Lat:          &latCharlie,
+		Lng:          &lngCharlie,
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 	}
@@ -202,10 +239,23 @@ func main() {
 		PasswordHash: passHash,
 		Role:         entities.RoleDonor,
 		Name:         "David Miller",
+		Lat:          &latDavid,
+		Lng:          &lngDavid,
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 	}
-	_, _ = mongoDB.Collection("users").InsertMany(ctx, []interface{}{donorAlice, donorBob, donorCharlie, donorDavid})
+	donorJoan := entities.User{
+		ID:           primitive.NewObjectID(),
+		Email:        "joanouma@gmail.com",
+		PasswordHash: joanoumaPassHash,
+		Role:         entities.RoleDonor,
+		Name:         "joanouma",
+		Lat:          &latJoan,
+		Lng:          &lngJoan,
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
+	_, _ = mongoDB.Collection("users").InsertMany(ctx, []interface{}{donorAlice, donorBob, donorCharlie, donorDavid, donorJoan})
 
 	// 5. Create Donations and Leaderboard entries (donor_stats)
 	log.Println("Creating donations and stats...")
@@ -374,10 +424,56 @@ func main() {
 		UpdatedAt:      charlieDonationDate,
 	}
 
+	joanDonationDate1 := now.Add(-60 * 24 * time.Hour)
+	joanNextEligible1 := joanDonationDate1.Add(56 * 24 * time.Hour)
+	donationJoan1 := entities.Donation{
+		ID:             primitive.NewObjectID(),
+		DonorID:        donorJoan.ID,
+		AgencyID:       agency1.ID,
+		LocationID:     &loc1.ID,
+		Pints:          2,
+		Status:         entities.StatusVerified,
+		DonatedAt:      joanDonationDate1,
+		VerifiedAt:     &joanDonationDate1,
+		VerifiedBy:     &agency1.ID,
+		NextEligibleAt: &joanNextEligible1,
+		CreatedAt:      joanDonationDate1,
+		UpdatedAt:      joanDonationDate1,
+	}
+
+	joanDonationDate2 := now.Add(-120 * 24 * time.Hour)
+	joanNextEligible2 := joanDonationDate2.Add(56 * 24 * time.Hour)
+	donationJoan2 := entities.Donation{
+		ID:             primitive.NewObjectID(),
+		DonorID:        donorJoan.ID,
+		AgencyID:       agency1.ID,
+		LocationID:     &loc1.ID,
+		Pints:          2,
+		Status:         entities.StatusVerified,
+		DonatedAt:      joanDonationDate2,
+		VerifiedAt:     &joanDonationDate2,
+		VerifiedBy:     &agency1.ID,
+		NextEligibleAt: &joanNextEligible2,
+		CreatedAt:      joanDonationDate2,
+		UpdatedAt:      joanDonationDate2,
+	}
+
+	donationJoanPending := entities.Donation{
+		ID:         primitive.NewObjectID(),
+		DonorID:    donorJoan.ID,
+		AgencyID:   agency1.ID,
+		LocationID: &loc1.ID,
+		Pints:      1,
+		Status:     entities.StatusPending,
+		DonatedAt:  now,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}
+
 	_, _ = mongoDB.Collection("donations").InsertMany(ctx, []interface{}{
 		donationAlice1, donationAlice2, donationAlice3, donationAlice4, donationAlice5,
 		donationBob1, donationBob2, donationBobPending, donationBobRejected,
-		donationCharlie1,
+		donationCharlie1, donationJoan1, donationJoan2, donationJoanPending,
 	})
 
 	statsAlice := entities.DonorStats{
@@ -404,8 +500,16 @@ func main() {
 		UpdatedAt:      time.Now().UTC(),
 	}
 
+	statsJoan := entities.DonorStats{
+		ID:             donorJoan.ID,
+		TotalDonations: 2,
+		TotalPints:     4,
+		Points:         40,
+		UpdatedAt:      time.Now().UTC(),
+	}
+
 	_, _ = mongoDB.Collection("donor_stats").InsertMany(ctx, []interface{}{
-		statsAlice, statsBob, statsCharlie,
+		statsAlice, statsBob, statsCharlie, statsJoan,
 	})
 
 	fmt.Println("==================================================")
@@ -417,5 +521,6 @@ func main() {
 	fmt.Printf("- Donor 2 (Bob): %s (Password: password123) - Leaderboard: 40 pts, 1 Pending, 1 Rejected\n", donorBob.Email)
 	fmt.Printf("- Donor 3 (Charlie): %s (Password: password123) - Leaderboard: 15 pts, Eligible now\n", donorCharlie.Email)
 	fmt.Printf("- Donor 4 (David): %s (Password: password123) - Never Donated\n", donorDavid.Email)
+	fmt.Printf("- Custom Donor (Joan): %s (Password: assembly1234) - Leaderboard: 40 pts, 2 Verified, 1 Pending\n", donorJoan.Email)
 	fmt.Println("==================================================")
 }
