@@ -20,6 +20,7 @@ func New(
 	authHandler *handlers.AuthHandler,
 	locHandler *handlers.LocationHandler,
 	driveHandler *handlers.DriveHandler,
+	donationHandler *handlers.DonationHandler,
 ) *Server {
 	mux := http.NewServeMux()
 
@@ -44,7 +45,7 @@ func New(
 	mux.HandleFunc("/api/auth/refresh", authHandler.Refresh)
 	mux.Handle("/api/auth/me", authMiddleware(http.HandlerFunc(authHandler.Me)))
 
-	// Locations & Drives routing with trailing slash parsing
+	// Locations
 	mux.HandleFunc("/api/locations", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			locHandler.List(w, r)
@@ -79,6 +80,7 @@ func New(
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 	})
 
+	// Drives
 	mux.HandleFunc("/api/drives", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			driveHandler.List(w, r)
@@ -109,6 +111,53 @@ func New(
 		if r.Method == http.MethodDelete {
 			authMiddleware(http.HandlerFunc(driveHandler.Delete)).ServeHTTP(w, r)
 			return
+		}
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	})
+
+	// Donations routing
+	mux.HandleFunc("/api/donations", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			authMiddleware(http.HandlerFunc(donationHandler.Create)).ServeHTTP(w, r)
+			return
+		}
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	})
+
+	mux.HandleFunc("/api/donations/mine", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			authMiddleware(http.HandlerFunc(donationHandler.ListMine)).ServeHTTP(w, r)
+			return
+		}
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	})
+
+	mux.HandleFunc("/api/agency/donations/pending", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			authMiddleware(http.HandlerFunc(donationHandler.ListPending)).ServeHTTP(w, r)
+			return
+		}
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	})
+
+	mux.HandleFunc("/api/donations/", func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(r.URL.Path, "/")
+		// Expecting /api/donations/:id/verify or /api/donations/:id/reject
+		if len(parts) < 5 || parts[2] == "" {
+			http.Error(w, `{"error":"invalid resource path"}`, http.StatusBadRequest)
+			return
+		}
+
+		action := parts[4]
+		if r.Method == http.MethodPost {
+			if action == "verify" {
+				authMiddleware(http.HandlerFunc(donationHandler.Verify)).ServeHTTP(w, r)
+				return
+			}
+			if action == "reject" {
+				authMiddleware(http.HandlerFunc(donationHandler.Reject)).ServeHTTP(w, r)
+				return
+			}
 		}
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 	})
