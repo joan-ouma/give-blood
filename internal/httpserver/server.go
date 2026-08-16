@@ -5,17 +5,16 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/joan-ouma/give-blood/internal/user"
+	"github.com/joan-ouma/give-blood/internal/handlers"
 )
 
 type Server struct {
 	server *http.Server
 }
 
-func New(port string, allowedOrigin string, authMiddleware func(http.Handler) http.Handler, userHandler *user.Handler) *Server {
+func New(port string, allowedOrigin string, authMiddleware func(http.Handler) http.Handler, authHandler *handlers.AuthHandler) *Server {
 	mux := http.NewServeMux()
 
-	// CORS wrapper and options preflight handler
 	cors := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
@@ -31,12 +30,11 @@ func New(port string, allowedOrigin string, authMiddleware func(http.Handler) ht
 		})
 	}
 
-	mux.HandleFunc("/api/auth/register", userHandler.Register)
-	mux.HandleFunc("/api/auth/login", userHandler.Login)
-	mux.HandleFunc("/api/auth/refresh", userHandler.Refresh)
+	mux.HandleFunc("/api/auth/register", authHandler.Register)
+	mux.HandleFunc("/api/auth/login", authHandler.Login)
+	mux.HandleFunc("/api/auth/refresh", authHandler.Refresh)
 
-	// Protected GET /auth/me
-	mux.Handle("/api/auth/me", authMiddleware(http.HandlerFunc(userHandler.Me)))
+	mux.Handle("/api/auth/me", authMiddleware(http.HandlerFunc(authHandler.Me)))
 
 	srv := &http.Server{
 		Addr:         ":" + port,

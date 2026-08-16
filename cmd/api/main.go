@@ -11,8 +11,9 @@ import (
 	"github.com/joan-ouma/give-blood/internal/auth"
 	"github.com/joan-ouma/give-blood/internal/config"
 	"github.com/joan-ouma/give-blood/internal/db"
+	"github.com/joan-ouma/give-blood/internal/handlers"
 	"github.com/joan-ouma/give-blood/internal/httpserver"
-	"github.com/joan-ouma/give-blood/internal/user"
+	"github.com/joan-ouma/give-blood/internal/service"
 )
 
 func main() {
@@ -33,22 +34,21 @@ func main() {
 
 	mongoDB := database.Client.Database("blood_donation")
 
-	repo := user.NewRepository(mongoDB)
+	userService := service.NewUserService(mongoDB)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := repo.EnsureIndexes(ctx); err != nil {
+	if err := userService.EnsureIndexes(ctx); err != nil {
 		log.Fatalf("database index setup error: %v", err)
 	}
 
-	svc := user.NewService(repo)
 	tokenSvc := auth.NewTokenService(cfg.JWTSecret)
 	limiter := auth.NewRateLimiter()
-	handler := user.NewHandler(svc, tokenSvc, limiter)
+	authHandler := handlers.NewAuthHandler(userService, tokenSvc, limiter)
 
 	authMiddleware := auth.Middleware(tokenSvc)
 
-	srv := httpserver.New(cfg.Port, cfg.AllowedOrigin, authMiddleware, handler)
+	srv := httpserver.New(cfg.Port, cfg.AllowedOrigin, authMiddleware, authHandler)
 
 	go func() {
 		if err := srv.Start(); err != nil && err != httpserver.ErrServerClosed {

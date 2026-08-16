@@ -1,4 +1,4 @@
-package user
+package handlers
 
 import (
 	"encoding/json"
@@ -7,46 +7,43 @@ import (
 	"time"
 
 	"github.com/joan-ouma/give-blood/internal/auth"
+	"github.com/joan-ouma/give-blood/internal/dto"
+	"github.com/joan-ouma/give-blood/internal/service"
 )
 
-type Handler struct {
-	service      *Service
+type AuthHandler struct {
+	userService  *service.UserService
 	tokenService *auth.TokenService
 	limiter      *auth.RateLimiter
 }
 
-func NewHandler(service *Service, tokenService *auth.TokenService, limiter *auth.RateLimiter) *Handler {
-	return &Handler{
-		service:      service,
+func NewAuthHandler(userService *service.UserService, tokenService *auth.TokenService, limiter *auth.RateLimiter) *AuthHandler {
+	return &AuthHandler{
+		userService:  userService,
 		tokenService: tokenService,
 		limiter:      limiter,
 	}
 }
 
-type errorFieldResponse struct {
-	Error  string            `json:"error"`
-	Fields map[string]string `json:"fields,omitempty"`
-}
-
 func writeError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(errorFieldResponse{Error: msg})
+	_ = json.NewEncoder(w).Encode(dto.ErrorFieldResponse{Error: msg})
 }
 
 func writeFieldsError(w http.ResponseWriter, status int, msg string, fields map[string]string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(errorFieldResponse{Error: msg, Fields: fields})
+	_ = json.NewEncoder(w).Encode(dto.ErrorFieldResponse{Error: msg, Fields: fields})
 }
 
-func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	var req RegisterRequest
+	var req dto.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -71,13 +68,13 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.service.Register(r.Context(), &req)
+	u, err := h.userService.Register(r.Context(), &req)
 	if err != nil {
-		if errors.Is(err, ErrAlreadyExists) {
+		if errors.Is(err, service.ErrAlreadyExists) {
 			writeError(w, http.StatusBadRequest, "email already registered")
 			return
 		}
-		if errors.Is(err, ErrInvalidEmail) || errors.Is(err, ErrInvalidPassword) || errors.Is(err, ErrInvalidRole) || errors.Is(err, ErrInvalidName) {
+		if errors.Is(err, service.ErrInvalidEmail) || errors.Is(err, service.ErrInvalidPass) || errors.Is(err, service.ErrInvalidRole) || errors.Is(err, service.ErrInvalidName) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -90,13 +87,13 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(u)
 }
 
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	var req LoginRequest
+	var req dto.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -107,7 +104,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.service.Authenticate(r.Context(), &req)
+	u, err := h.userService.Authenticate(r.Context(), &req)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid email or password")
 		return
@@ -141,7 +138,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -178,7 +175,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -190,7 +187,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.service.GetByID(r.Context(), userID)
+	u, err := h.userService.GetByID(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "user not found")
 		return

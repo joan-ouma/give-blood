@@ -1,4 +1,4 @@
-package user
+package entities
 
 import (
 	"time"
@@ -21,16 +21,4 @@ type User struct {
 	Name         string             `bson:"name" json:"name"`
 	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
 	UpdatedAt    time.Time          `bson:"updatedAt" json:"updatedAt"`
-}
-
-type RegisterRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-	Role     string `json:"role"`
-	Name     string `json:"name"`
-}
-
-type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
 }
