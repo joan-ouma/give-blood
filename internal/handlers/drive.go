@@ -76,25 +76,26 @@ func (h *DriveHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	drive, err := h.driveService.Create(r.Context(), userID, &req)
+	if errors.Is(err, service.ErrDriveValidation) {
+		writeError(w, http.StatusBadRequest, "validation failed")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrDriveValidation) {
-			writeError(w, http.StatusBadRequest, "validation failed")
-			return
-		}
-		if errors.Is(err, service.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	response := mapDriveToResponse(drive)
+	var namesMap map[primitive.ObjectID]string
 	if drive.LocationID != nil {
-		namesMap, err := h.driveService.GetLocationsNamesMap(r.Context(), []primitive.ObjectID{*drive.LocationID})
-		if err == nil {
-			response.LocationName = namesMap[*drive.LocationID]
-		}
+		namesMap, _ = h.driveService.GetLocationsNamesMap(r.Context(), []primitive.ObjectID{*drive.LocationID})
+	}
+	if namesMap != nil {
+		response.LocationName = namesMap[*drive.LocationID]
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -162,29 +163,30 @@ func (h *DriveHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	drive, err := h.driveService.Update(r.Context(), userID, driveIDStr, &req)
+	if errors.Is(err, service.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "drive not found")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if errors.Is(err, service.ErrDriveValidation) {
+		writeError(w, http.StatusBadRequest, "validation failed")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "drive not found")
-			return
-		}
-		if errors.Is(err, service.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
-		}
-		if errors.Is(err, service.ErrDriveValidation) {
-			writeError(w, http.StatusBadRequest, "validation failed")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	response := mapDriveToResponse(drive)
+	var namesMap map[primitive.ObjectID]string
 	if drive.LocationID != nil {
-		namesMap, err := h.driveService.GetLocationsNamesMap(r.Context(), []primitive.ObjectID{*drive.LocationID})
-		if err == nil {
-			response.LocationName = namesMap[*drive.LocationID]
-		}
+		namesMap, _ = h.driveService.GetLocationsNamesMap(r.Context(), []primitive.ObjectID{*drive.LocationID})
+	}
+	if namesMap != nil {
+		response.LocationName = namesMap[*drive.LocationID]
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -211,15 +213,15 @@ func (h *DriveHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	driveIDStr := parts[3]
 
 	err = h.driveService.Delete(r.Context(), userID, driveIDStr)
+	if errors.Is(err, service.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "drive not found")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "drive not found")
-			return
-		}
-		if errors.Is(err, service.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -241,21 +243,22 @@ func (h *DriveHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	driveIDStr := parts[2]
 
 	drive, err := h.driveService.GetByID(r.Context(), driveIDStr)
+	if errors.Is(err, service.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "drive not found")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "drive not found")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	response := mapDriveToResponse(drive)
+	var namesMap map[primitive.ObjectID]string
 	if drive.LocationID != nil {
-		namesMap, err := h.driveService.GetLocationsNamesMap(r.Context(), []primitive.ObjectID{*drive.LocationID})
-		if err == nil {
-			response.LocationName = namesMap[*drive.LocationID]
-		}
+		namesMap, _ = h.driveService.GetLocationsNamesMap(r.Context(), []primitive.ObjectID{*drive.LocationID})
+	}
+	if namesMap != nil {
+		response.LocationName = namesMap[*drive.LocationID]
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -274,20 +277,16 @@ func (h *DriveHandler) List(w http.ResponseWriter, r *http.Request) {
 	offsetStr := r.URL.Query().Get("offset")
 
 	var limit int64 = 20
-	if limitStr != "" {
-		if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
-			limit = parsed
-		}
+	if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
+		limit = parsed
 	}
 	if limit > 100 {
 		limit = 100
 	}
 
 	var offset int64 = 0
-	if offsetStr != "" {
-		if parsed, err := strconv.ParseInt(offsetStr, 10, 64); err == nil && parsed >= 0 {
-			offset = parsed
-		}
+	if parsed, err := strconv.ParseInt(offsetStr, 10, 64); err == nil && parsed >= 0 {
+		offset = parsed
 	}
 
 	drives, err := h.driveService.List(r.Context(), city, includePast, limit, offset)

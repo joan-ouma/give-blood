@@ -21,6 +21,7 @@ func New(
 	locHandler *handlers.LocationHandler,
 	driveHandler *handlers.DriveHandler,
 	donationHandler *handlers.DonationHandler,
+	leaderboardHandler *handlers.LeaderboardHandler,
 ) *Server {
 	mux := http.NewServeMux()
 
@@ -30,6 +31,12 @@ func New(
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+			// Security Headers
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("X-XSS-Protection", "1; mode=block")
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; sandbox")
 
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -158,6 +165,23 @@ func New(
 				authMiddleware(http.HandlerFunc(donationHandler.Reject)).ServeHTTP(w, r)
 				return
 			}
+		}
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	})
+
+	// Eligibility & Leaderboard
+	mux.HandleFunc("/api/donors/me/eligibility", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			authMiddleware(http.HandlerFunc(leaderboardHandler.GetEligibility)).ServeHTTP(w, r)
+			return
+		}
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+	})
+
+	mux.HandleFunc("/api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			leaderboardHandler.GetLeaderboard(w, r)
+			return
 		}
 		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 	})

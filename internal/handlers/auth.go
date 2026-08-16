@@ -68,15 +68,15 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u, err := h.userService.Register(r.Context(), &req)
+	if errors.Is(err, service.ErrAlreadyExists) {
+		writeError(w, http.StatusBadRequest, "email already registered")
+		return
+	}
+	if errors.Is(err, service.ErrInvalidEmail) || errors.Is(err, service.ErrInvalidPass) || errors.Is(err, service.ErrInvalidRole) || errors.Is(err, service.ErrInvalidName) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrAlreadyExists) {
-			writeError(w, http.StatusBadRequest, "email already registered")
-			return
-		}
-		if errors.Is(err, service.ErrInvalidEmail) || errors.Is(err, service.ErrInvalidPass) || errors.Is(err, service.ErrInvalidRole) || errors.Is(err, service.ErrInvalidName) {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}

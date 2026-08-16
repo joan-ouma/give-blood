@@ -59,10 +59,8 @@ func (h *DonationHandler) Create(w http.ResponseWriter, r *http.Request) {
 		fields["donatedAt"] = "Donation date cannot be in the future"
 	}
 
-	if req.Pints != nil {
-		if *req.Pints < 1 || *req.Pints > 2 {
-			fields["pints"] = "Pints must be between 1 and 2"
-		}
+	if req.Pints != nil && (*req.Pints < 1 || *req.Pints > 2) {
+		fields["pints"] = "Pints must be between 1 and 2"
 	}
 
 	if len(fields) > 0 {
@@ -71,15 +69,15 @@ func (h *DonationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	donation, err := h.donationService.Create(r.Context(), userID, &req)
+	if errors.Is(err, service.ErrDonationValidation) {
+		writeError(w, http.StatusBadRequest, "validation failed")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrDonationValidation) {
-			writeError(w, http.StatusBadRequest, "validation failed")
-			return
-		}
-		if errors.Is(err, service.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -105,20 +103,16 @@ func (h *DonationHandler) ListMine(w http.ResponseWriter, r *http.Request) {
 	offsetStr := r.URL.Query().Get("offset")
 
 	var limit int64 = 20
-	if limitStr != "" {
-		if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
-			limit = parsed
-		}
+	if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
+		limit = parsed
 	}
 	if limit > 100 {
 		limit = 100
 	}
 
 	var offset int64 = 0
-	if offsetStr != "" {
-		if parsed, err := strconv.ParseInt(offsetStr, 10, 64); err == nil && parsed >= 0 {
-			offset = parsed
-		}
+	if parsed, err := strconv.ParseInt(offsetStr, 10, 64); err == nil && parsed >= 0 {
+		offset = parsed
 	}
 
 	list, err := h.donationService.ListMine(r.Context(), userID, limit, offset)
@@ -152,20 +146,16 @@ func (h *DonationHandler) ListPending(w http.ResponseWriter, r *http.Request) {
 	offsetStr := r.URL.Query().Get("offset")
 
 	var limit int64 = 20
-	if limitStr != "" {
-		if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
-			limit = parsed
-		}
+	if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
+		limit = parsed
 	}
 	if limit > 100 {
 		limit = 100
 	}
 
 	var offset int64 = 0
-	if offsetStr != "" {
-		if parsed, err := strconv.ParseInt(offsetStr, 10, 64); err == nil && parsed >= 0 {
-			offset = parsed
-		}
+	if parsed, err := strconv.ParseInt(offsetStr, 10, 64); err == nil && parsed >= 0 {
+		offset = parsed
 	}
 
 	list, err := h.donationService.ListPending(r.Context(), userID, limit, offset)
@@ -203,19 +193,19 @@ func (h *DonationHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	donationIDStr := parts[2]
 
 	donation, err := h.donationService.Verify(r.Context(), userID, donationIDStr)
+	if errors.Is(err, service.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "donation not found")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if errors.Is(err, service.ErrConflict) {
+		writeError(w, http.StatusConflict, "donation already processed")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "donation not found")
-			return
-		}
-		if errors.Is(err, service.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
-		}
-		if errors.Is(err, service.ErrConflict) {
-			writeError(w, http.StatusConflict, "donation already processed")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -257,19 +247,19 @@ func (h *DonationHandler) Reject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	donation, err := h.donationService.Reject(r.Context(), userID, donationIDStr, &req)
+	if errors.Is(err, service.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "donation not found")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if errors.Is(err, service.ErrConflict) {
+		writeError(w, http.StatusConflict, "donation already processed")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "donation not found")
-			return
-		}
-		if errors.Is(err, service.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
-		}
-		if errors.Is(err, service.ErrConflict) {
-			writeError(w, http.StatusConflict, "donation already processed")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}

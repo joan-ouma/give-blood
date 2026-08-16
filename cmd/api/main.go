@@ -37,6 +37,7 @@ func main() {
 	locationService := service.NewLocationService(mongoDB)
 	driveService := service.NewDriveService(mongoDB)
 	donationService := service.NewDonationService(mongoDB)
+	leaderboardService := service.NewLeaderboardService(mongoDB)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -53,6 +54,9 @@ func main() {
 	if err := donationService.EnsureIndexes(ctx); err != nil {
 		log.Fatalf("database index setup error (donation): %v", err)
 	}
+	if err := leaderboardService.EnsureIndexes(ctx); err != nil {
+		log.Fatalf("database index setup error (leaderboard): %v", err)
+	}
 
 	tokenSvc := service.NewTokenService(cfg.JWTSecret)
 	limiter := service.NewRateLimiter()
@@ -62,6 +66,7 @@ func main() {
 	locationHandler := handlers.NewLocationHandler(locationService)
 	driveHandler := handlers.NewDriveHandler(driveService)
 	donationHandler := handlers.NewDonationHandler(donationService, donationLimiter)
+	leaderboardHandler := handlers.NewLeaderboardHandler(leaderboardService, tokenSvc)
 
 	authMiddleware := service.Middleware(tokenSvc)
 
@@ -73,6 +78,7 @@ func main() {
 		locationHandler,
 		driveHandler,
 		donationHandler,
+		leaderboardHandler,
 	)
 
 	go func() {

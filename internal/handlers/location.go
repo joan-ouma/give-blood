@@ -59,15 +59,15 @@ func (h *LocationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	loc, err := h.locService.Create(r.Context(), userID, &req)
+	if errors.Is(err, service.ErrLocationValidation) {
+		writeError(w, http.StatusBadRequest, "validation failed")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrLocationValidation) {
-			writeError(w, http.StatusBadRequest, "validation failed")
-			return
-		}
-		if errors.Is(err, service.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -122,19 +122,19 @@ func (h *LocationHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	loc, err := h.locService.Update(r.Context(), userID, locationIDStr, &req)
+	if errors.Is(err, service.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "location not found")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if errors.Is(err, service.ErrLocationValidation) {
+		writeError(w, http.StatusBadRequest, "validation failed")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "location not found")
-			return
-		}
-		if errors.Is(err, service.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
-		}
-		if errors.Is(err, service.ErrLocationValidation) {
-			writeError(w, http.StatusBadRequest, "validation failed")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -163,15 +163,15 @@ func (h *LocationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	locationIDStr := parts[3]
 
 	err = h.locService.Delete(r.Context(), userID, locationIDStr)
+	if errors.Is(err, service.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "location not found")
+		return
+	}
+	if errors.Is(err, service.ErrForbidden) {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "location not found")
-			return
-		}
-		if errors.Is(err, service.ErrForbidden) {
-			writeError(w, http.StatusForbidden, "forbidden")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -193,11 +193,11 @@ func (h *LocationHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	locationIDStr := parts[3]
 
 	loc, err := h.locService.GetByID(r.Context(), locationIDStr)
+	if errors.Is(err, service.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "location not found")
+		return
+	}
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "location not found")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -217,20 +217,16 @@ func (h *LocationHandler) List(w http.ResponseWriter, r *http.Request) {
 	offsetStr := r.URL.Query().Get("offset")
 
 	var limit int64 = 20
-	if limitStr != "" {
-		if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
-			limit = parsed
-		}
+	if parsed, err := strconv.ParseInt(limitStr, 10, 64); err == nil && parsed > 0 {
+		limit = parsed
 	}
 	if limit > 100 {
 		limit = 100
 	}
 
 	var offset int64 = 0
-	if offsetStr != "" {
-		if parsed, err := strconv.ParseInt(offsetStr, 10, 64); err == nil && parsed >= 0 {
-			offset = parsed
-		}
+	if parsed, err := strconv.ParseInt(offsetStr, 10, 64); err == nil && parsed >= 0 {
+		offset = parsed
 	}
 
 	locations, err := h.locService.List(r.Context(), city, limit, offset)
