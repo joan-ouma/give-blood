@@ -6,18 +6,17 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/joan-ouma/give-blood/internal/auth"
 	"github.com/joan-ouma/give-blood/internal/dto"
 	"github.com/joan-ouma/give-blood/internal/service"
 )
 
 type AuthHandler struct {
 	userService  *service.UserService
-	tokenService *auth.TokenService
-	limiter      *auth.RateLimiter
+	tokenService *service.TokenService
+	limiter      *service.RateLimiter
 }
 
-func NewAuthHandler(userService *service.UserService, tokenService *auth.TokenService, limiter *auth.RateLimiter) *AuthHandler {
+func NewAuthHandler(userService *service.UserService, tokenService *service.TokenService, limiter *service.RateLimiter) *AuthHandler {
 	return &AuthHandler{
 		userService:  userService,
 		tokenService: tokenService,
@@ -181,7 +180,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, _, err := auth.GetUserFromContext(r.Context())
+	userID, _, err := service.GetUserFromContext(r.Context())
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return

@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joan-ouma/give-blood/internal/auth"
 	"github.com/joan-ouma/give-blood/internal/config"
 	"github.com/joan-ouma/give-blood/internal/db"
 	"github.com/joan-ouma/give-blood/internal/handlers"
@@ -42,11 +41,11 @@ func main() {
 		log.Fatalf("database index setup error: %v", err)
 	}
 
-	tokenSvc := auth.NewTokenService(cfg.JWTSecret)
-	limiter := auth.NewRateLimiter()
+	tokenSvc := service.NewTokenService(cfg.JWTSecret)
+	limiter := service.NewRateLimiter()
 	authHandler := handlers.NewAuthHandler(userService, tokenSvc, limiter)
 
-	authMiddleware := auth.Middleware(tokenSvc)
+	authMiddleware := service.Middleware(tokenSvc)
 
 	srv := httpserver.New(cfg.Port, cfg.AllowedOrigin, authMiddleware, authHandler)
 

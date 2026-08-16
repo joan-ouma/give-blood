@@ -12,7 +12,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
-	"github.com/joan-ouma/give-blood/internal/auth"
 	"github.com/joan-ouma/give-blood/internal/dto"
 	"github.com/joan-ouma/give-blood/internal/entities"
 )
@@ -64,7 +63,7 @@ func (s *UserService) Register(ctx context.Context, req *dto.RegisterRequest) (*
 		return nil, ErrInvalidName
 	}
 
-	hash, err := auth.HashPassword(password)
+	hash, err := HashPassword(password)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +106,7 @@ func (s *UserService) Authenticate(ctx context.Context, req *dto.LoginRequest) (
 		return nil, err
 	}
 
-	if !auth.CheckPasswordHash(req.Password, u.PasswordHash) {
+	if !CheckPasswordHash(req.Password, u.PasswordHash) {
 		return nil, errors.New("invalid credentials")
 	}
 
