@@ -34,20 +34,39 @@ func main() {
 	mongoDB := database.Client.Database("blood_donation")
 
 	userService := service.NewUserService(mongoDB)
+	locationService := service.NewLocationService(mongoDB)
+	driveService := service.NewDriveService(mongoDB)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	if err := userService.EnsureIndexes(ctx); err != nil {
-		log.Fatalf("database index setup error: %v", err)
+		log.Fatalf("database index setup error (user): %v", err)
+	}
+	if err := locationService.EnsureIndexes(ctx); err != nil {
+		log.Fatalf("database index setup error (location): %v", err)
+	}
+	if err := driveService.EnsureIndexes(ctx); err != nil {
+		log.Fatalf("database index setup error (drive): %v", err)
 	}
 
 	tokenSvc := service.NewTokenService(cfg.JWTSecret)
 	limiter := service.NewRateLimiter()
+
 	authHandler := handlers.NewAuthHandler(userService, tokenSvc, limiter)
+	locationHandler := handlers.NewLocationHandler(locationService)
+	driveHandler := handlers.NewDriveHandler(driveService)
 
 	authMiddleware := service.Middleware(tokenSvc)
 
-	srv := httpserver.New(cfg.Port, cfg.AllowedOrigin, authMiddleware, authHandler)
+	srv := httpserver.New(
+		cfg.Port,
+		cfg.AllowedOrigin,
+		authMiddleware,
+		authHandler,
+		locationHandler,
+		driveHandler,
+	)
 
 	go func() {
 		if err := srv.Start(); err != nil && err != httpserver.ErrServerClosed {
