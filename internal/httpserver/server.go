@@ -28,7 +28,15 @@ func New(
 	cors := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if origin == "http://localhost:5173" || origin == "http://localhost:5174" || origin == allowedOrigin {
+			allowedList := strings.Split(allowedOrigin, ",")
+			isAllowed := false
+			for _, o := range allowedList {
+				if strings.TrimSpace(o) == origin {
+					isAllowed = true
+					break
+				}
+			}
+			if origin == "http://localhost:5173" || origin == "http://localhost:5174" || origin == "https://give-blood-frontend.vercel.app" || isAllowed {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 			} else {
 				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
